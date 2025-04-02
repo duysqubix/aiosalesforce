@@ -9,13 +9,14 @@ import orjson
 import pytest
 import respx
 
-from aiosalesforce.bulk.v2.ingest import BulkIngestClient, JobInfo, JobResult
+from aiosalesforce.bulk.v2.defs import JobIngestInfo, JobIngestResult
+from aiosalesforce.bulk.v2.ingest import BulkIngestClient
 
 if TYPE_CHECKING:
     from .conftest import VirtualIngestJob
 
 
-def job_info_to_json(job: JobInfo) -> bytes:
+def job_info_to_json(job: JobIngestInfo) -> bytes:
     job_dict = dataclasses.asdict(job)
 
     def to_camel_case(s: str) -> str:
@@ -25,14 +26,14 @@ def job_info_to_json(job: JobInfo) -> bytes:
     return orjson.dumps(
         {
             to_camel_case(field.name): job_dict[field.name]
-            for field in dataclasses.fields(JobInfo)
+            for field in dataclasses.fields(JobIngestInfo)
         }
     )
 
 
 @pytest.fixture(scope="function")
-def dummy_job(config: dict[str, str]) -> JobInfo:
-    return JobInfo(
+def dummy_job(config: dict[str, str]) -> JobIngestInfo:
+    return JobIngestInfo(
         id="7503h00000L0k2AAAR",
         operation="insert",
         object="Account",
@@ -57,7 +58,7 @@ def dummy_job(config: dict[str, str]) -> JobInfo:
 async def test_create_job(
     httpx_mock_router: respx.MockRouter,
     ingest_client: BulkIngestClient,
-    dummy_job: JobInfo,
+    dummy_job: JobIngestInfo,
 ):
     dummy_job.operation = "upsert"
     dummy_job.external_id_field_name = "ExternalId__c"
@@ -79,7 +80,7 @@ async def test_create_job(
 async def test_get_job(
     httpx_mock_router: respx.MockRouter,
     ingest_client: BulkIngestClient,
-    dummy_job: JobInfo,
+    dummy_job: JobIngestInfo,
 ):
     job_id = "7503h00000L0k2AAAR"
     httpx_mock_router.get(f"{ingest_client.base_url}/{job_id}").mock(
@@ -96,7 +97,7 @@ async def test_list_jobs(
     config: dict[str, str],
     httpx_mock_router: respx.MockRouter,
     ingest_client: BulkIngestClient,
-    dummy_job: JobInfo,
+    dummy_job: JobIngestInfo,
 ):
     dummy_jobs = [
         dataclasses.replace(dummy_job, id=f"7503h00000L0k2AAAR{i}") for i in range(10)
@@ -147,7 +148,7 @@ async def test_list_jobs(
 async def test_abort_job(
     httpx_mock_router: respx.MockRouter,
     ingest_client: BulkIngestClient,
-    dummy_job: JobInfo,
+    dummy_job: JobIngestInfo,
 ):
     job_id = "7503h00000L0k2AAAR"
     dummy_job.id = job_id
@@ -183,7 +184,7 @@ async def test_delete_job(
 async def test_upload_job_data(
     httpx_mock_router: respx.MockRouter,
     ingest_client: BulkIngestClient,
-    dummy_job: JobInfo,
+    dummy_job: JobIngestInfo,
 ):
     job_id = "7503h00000L0k2AAAR"
     data = b"hello world"
@@ -231,7 +232,7 @@ async def test_perform_operation(
     # Mock sleeping when polling job status
     sleep_mock = AsyncMock()
     with patch("asyncio.sleep", sleep_mock):
-        results: list[JobResult] = []
+        results: list[JobIngestResult] = []
         async for _result in ingest_client.perform_operation("insert", "Contact", data):
             results.append(_result)
     # 2 transitions: UploadComplete -> InProgress -> JobComplete
@@ -261,7 +262,7 @@ async def test_perform_operation_with_multiple_jobs(
     # Mock sleeping when polling job status
     sleep_mock = AsyncMock()
     with patch("asyncio.sleep", sleep_mock):
-        results: list[JobResult] = []
+        results: list[JobIngestResult] = []
         async for _result in ingest_client.perform_operation(
             "insert",
             "Contact",

@@ -9,9 +9,6 @@ from typing import (
     AsyncIterator,
     Collection,
     Iterable,
-    Literal,
-    Self,
-    TypeAlias,
 )
 
 from httpx import Response
@@ -20,86 +17,10 @@ from aiosalesforce.events import BulkApiBatchConsumptionEvent
 from aiosalesforce.utils import json_dumps, json_loads
 
 from ._csv import deserialize_ingest_results, serialize_ingest_data
+from .defs import JobIngestInfo, JobIngestResult, OperationType
 
 if TYPE_CHECKING:
     from .client import BulkClientV2
-
-OperationType: TypeAlias = Literal[
-    "insert",
-    "delete",
-    "hardDelete",
-    "update",
-    "upsert",
-]
-
-
-@dataclasses.dataclass
-class JobInfo:
-    """Bulk API 2.0 ingest job information."""
-
-    id: str
-    operation: str
-    object: str
-    created_by_id: str
-    created_date: datetime.datetime
-    system_modstamp: datetime.datetime
-    state: Literal[
-        "Open",
-        "UploadComplete",
-        "InProgress",
-        "JobComplete",
-        "Aborted",
-        "Failed",
-    ]
-    external_id_field_name: str | None
-    concurrency_mode: Literal["Parallel"]
-    content_type: Literal["CSV"]
-    api_version: str
-    job_type: Literal["V2Ingest"] | None
-    content_url: str
-    line_ending: Literal["LF", "CRLF"]
-    column_delimiter: Literal[
-        "BACKQUOTE",
-        "CARET",
-        "COMMA",
-        "PIPE",
-        "SEMICOLON",
-        "TAB",
-    ]
-
-    @classmethod
-    def from_json(cls, data: bytes) -> Self:
-        job_info = cls(
-            **{
-                field.name: (_ := json_loads(data)).get(
-                    "".join(
-                        [
-                            component.capitalize() if i > 0 else component
-                            for i, component in enumerate(field.name.split("_"))
-                        ]
-                    ),
-                    None,
-                )
-                for field in dataclasses.fields(cls)
-            }
-        )
-        for attr in ["created_date", "system_modstamp"]:
-            setattr(
-                job_info,
-                attr,
-                datetime.datetime.fromisoformat(getattr(job_info, attr)),
-            )
-        return job_info
-
-
-@dataclasses.dataclass
-class JobResult:
-    """Bulk API 2.0 ingest job result."""
-
-    job_info: JobInfo
-    successful_results: list[dict[str, str]]
-    failed_results: list[dict[str, str]]
-    unprocessed_records: list[dict[str, str]]
 
 
 class BulkIngestClient:
@@ -129,7 +50,7 @@ class BulkIngestClient:
         sobject: str,
         external_id_field: str | None = None,
         assignment_rule_id: str | None = None,
-    ) -> JobInfo:
+    ) -> JobIngestInfo:
         """
         Create a new ingest job.
 
@@ -148,7 +69,7 @@ class BulkIngestClient:
 
         Returns
         -------
-        JobInfo
+        JobIngestInfo
             _description_
         """
         payload: dict[str, str] = {
@@ -168,9 +89,9 @@ class BulkIngestClient:
             content=json_dumps(payload),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
-        return JobInfo.from_json(response.content)
+        return JobIngestInfo.from_json(response.content)
 
-    async def get_job(self, job_id: str) -> JobInfo:
+    async def get_job(self, job_id: str) -> JobIngestInfo:
         """
         Get information about ingest job.
 
@@ -181,7 +102,7 @@ class BulkIngestClient:
 
         Returns
         -------
-        JobInfo
+        JobIngestInfo
             Job information.
 
         """
@@ -190,12 +111,12 @@ class BulkIngestClient:
             f"{self.base_url}/{job_id}",
             headers={"Accept": "application/json"},
         )
-        return JobInfo.from_json(response.content)
+        return JobIngestInfo.from_json(response.content)
 
     async def list_jobs(
         self,
         is_pk_chunking_enabled: bool | None = None,
-    ) -> AsyncIterator[JobInfo]:
+    ) -> AsyncIterator[JobIngestInfo]:
         """
         List all ingest jobs.
 
@@ -206,7 +127,7 @@ class BulkIngestClient:
 
         Yields
         ------
-        JobInfo
+        JobIngestInfo
             Job information.
 
         """
@@ -231,12 +152,12 @@ class BulkIngestClient:
                 )
             response_json: dict = json_loads(response.content)
             for record in response_json["records"]:
-                yield JobInfo.from_json(json_dumps(record))
+                yield JobIngestInfo.from_json(json_dumps(record))
             next_url = response_json.get("nextRecordsUrl", None)
             if next_url is None:
                 break
 
-    async def abort_job(self, job_id: str) -> JobInfo:
+    async def abort_job(self, job_id: str) -> JobIngestInfo:
         """
         Abort ingest job.
 
@@ -247,7 +168,7 @@ class BulkIngestClient:
 
         Returns
         -------
-        JobInfo
+        JobIngestInfo
             Job information.
 
         """
@@ -257,7 +178,7 @@ class BulkIngestClient:
             content=json_dumps({"state": "Aborted"}),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
-        return JobInfo.from_json(response.content)
+        return JobIngestInfo.from_json(response.content)
 
     async def delete_job(self, job_id: str) -> None:
         """
@@ -278,7 +199,7 @@ class BulkIngestClient:
         self,
         job_id: str,
         data: bytes,
-    ) -> JobInfo:
+    ) -> JobIngestInfo:
         """
         Upload data for an ingest job.
 
@@ -293,7 +214,7 @@ class BulkIngestClient:
 
         Returns
         -------
-        JobInfo
+        JobIngestInfo
             Job information.
 
         """
@@ -320,7 +241,7 @@ class BulkIngestClient:
                 count=math.ceil((len(data.strip(b"\n").split(b"\n")) - 1) / 10_000),
             )
         )
-        return JobInfo.from_json(response.content)
+        return JobIngestInfo.from_json(response.content)
 
     async def __perform_operation(
         self,
@@ -330,7 +251,7 @@ class BulkIngestClient:
         external_id_field: str | None = None,
         assignment_rule_id: str | None = None,
         polling_interval: float = 5.0,
-    ) -> JobResult:
+    ) -> JobIngestResult:
         job = await self.create_job(
             operation,
             sobject,
@@ -358,7 +279,7 @@ class BulkIngestClient:
                     )
                 )
 
-        return JobResult(
+        return JobIngestResult(
             job_info=job,
             successful_results=deserialize_ingest_results(
                 tasks[0].result().content,
@@ -382,7 +303,7 @@ class BulkIngestClient:
         external_id_field: str | None = None,
         assignment_rule_id: str | None = None,
         polling_interval: float = 5.0,
-    ) -> AsyncIterator[JobResult]:
+    ) -> AsyncIterator[JobIngestResult]:
         """
         Perform a bulk ingest operation.
 
@@ -419,12 +340,12 @@ class BulkIngestClient:
 
         Yields
         ------
-        JobResult
+        JobIngestResult
             Job result containing job information and successful, failed,
             and unprocessed records.
 
         """
-        tasks: list[asyncio.Task[JobResult]] = []
+        tasks: list[asyncio.Task[JobIngestResult]] = []
         for csv_payload in serialize_ingest_data(
             data,
             fieldnames=fieldnames,

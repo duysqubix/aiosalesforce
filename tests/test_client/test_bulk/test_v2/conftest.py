@@ -12,7 +12,8 @@ import respx
 from aiosalesforce import Salesforce
 from aiosalesforce.bulk.v2._csv import serialize_ingest_data
 from aiosalesforce.bulk.v2.client import BulkClientV2
-from aiosalesforce.bulk.v2.ingest import BulkIngestClient, JobInfo
+from aiosalesforce.bulk.v2.defs import JobIngestInfo
+from aiosalesforce.bulk.v2.ingest import BulkIngestClient
 
 
 @pytest.fixture(scope="function")
@@ -45,7 +46,7 @@ class VirtualIngestJob:
         self.httpx_mock_router = httpx_mock_router
         self.ingest_client = ingest_client
 
-        self.job_info = JobInfo(
+        self.job_info = JobIngestInfo(
             id="".join(random.choices("0123456789", k=18)),  # noqa: S311
             operation=operation,
             object=sobject,
@@ -151,7 +152,7 @@ class VirtualIngestJob:
         return orjson.dumps(
             {
                 to_camel_case(field.name): job_dict[field.name]
-                for field in dataclasses.fields(JobInfo)
+                for field in dataclasses.fields(JobIngestInfo)
             }
         )
 

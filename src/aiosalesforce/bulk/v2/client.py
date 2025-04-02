@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any, Iterable
 if TYPE_CHECKING:
     from aiosalesforce.client import Salesforce
 
-from .ingest import BulkIngestClient, JobInfo, OperationType
+from .defs import JobIngestInfo, OperationType
+from .ingest import BulkIngestClient
+from .query import BulkQueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 class IngestResult:
     """Bulk API 2.0 ingest operation result."""
 
-    jobs: list[JobInfo]
+    jobs: list[JobIngestInfo]
     successful_results: list[dict[str, str]]
     failed_results: list[dict[str, str]]
     unprocessed_records: list[dict[str, str]]
@@ -55,6 +57,12 @@ class BulkClientV2:
     def ingest(self) -> BulkIngestClient:
         """Manage ingest jobs at a low level."""
         return BulkIngestClient(self)
+
+    @cached_property
+    def query(self) -> "BulkQueryClient":
+        """Manage query jobs at a low level."""
+
+        return BulkQueryClient(self)
 
     async def __perform_operation(
         self,

@@ -24,33 +24,11 @@ Documentation = "https://github.com/georgebv/aiosalesforce"
 Repository = "https://github.com/georgebv/aiosalesforce"
 
 [project.optional-dependencies]
-jwt = [
-    "pyjwt[crypto]>=2.8.0",
-]
+jwt = []
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling"] 
 build-backend = "hatchling.build"
-
-[tool.rye]
-managed = true
-dev-dependencies = [
-    # Linting
-    "ruff>=0.3.0",
-    "mypy>=1.8.0",
-    # Documentation
-    "mkdocs>=1.5.3",
-    "mkdocs-material>=9.5.13",
-    "mkdocstrings[python]>=0.24.1",
-    # Testing
-    "pytest>=8.0.2",
-    "pytest-asyncio>=0.23.5.post1",
-    "pytest-cov>=4.1.0",
-    "respx>=0.20.2",
-    "time-machine>=2.14.0",
-    # Development
-    "pre-commit>=3.7.0",
-]
 
 [tool.hatch.version]
 path = "src/aiosalesforce/__init__.py"
@@ -139,3 +117,16 @@ omit = [
 precision = 1
 skip_empty = true
 sort = "-Cover"
+
+[dependency-groups]
+dev = [
+    "mkdocs>=1.6.1",
+    "mypy>=1.15.0",
+    "pre-commit>=4.2.0",
+    "pyjwt[crypto]>=2.10.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+    "pytest-cov>=6.1.0",
+    "respx>=0.22.0",
+    "time-machine>=2.16.0",
+]
